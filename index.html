@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>화학 평형 시뮬레이션</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Noto Sans KR', sans-serif;
+    background: #f0f2f5;
+    color: #222;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+
+
+  .layout { display: flex; flex: 1; overflow: hidden; }
+
+  /* 왼쪽 사이드바 */
+  .sidebar {
+    width: 200px;
+    background: #fff;
+    border-right: 1px solid #dde1e8;
+    padding: 18px 14px;
+    overflow-y: auto;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .reaction-box {
+    background: #f0f4ff;
+    border: 1px solid #c7d7ff;
+    border-radius: 8px;
+    padding: 12px;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 700;
+    color: #2a4aaa;
+    line-height: 1.8;
+  }
+
+  .section-label { font-size: 11px; color: #999; margin-bottom: 6px; }
+
+  .slider-group { margin-bottom: 10px; }
+  .slider-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+  .slider-name { font-size: 11px; color: #555; }
+  .slider-val {
+    font-size: 11px; color: #4a7eff; font-weight: 600;
+    background: #f0f4ff; padding: 1px 6px; border-radius: 4px;
+    min-width: 36px; text-align: center;
+  }
+
+  input[type=range] {
+    -webkit-appearance: none; width: 100%; height: 3px;
+    background: #dde1e8; border-radius: 3px; outline: none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 13px; height: 13px;
+    border-radius: 50%; background: #4a7eff; cursor: pointer;
+  }
+
+  .divider { height: 1px; background: #eaedf2; }
+
+  .btn-group { display: flex; gap: 6px; }
+  .btn {
+    flex: 1; padding: 9px 4px; border: none; border-radius: 6px;
+    font-family: 'Noto Sans KR', sans-serif; font-size: 12px;
+    font-weight: 500; cursor: pointer; transition: all 0.15s;
+  }
+  .btn-start { background: #4a7eff; color: #fff; }
+  .btn-start:hover { background: #3366ee; }
+  .btn-pause { background: #f59e0b; color: #fff; }
+  .btn-pause:hover { background: #d97706; }
+  .btn-reset { background: #f0f2f5; color: #666; border: 1px solid #dde1e8; }
+  .btn-reset:hover { background: #e4e8f0; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .tip { font-size: 10px; color: #bbb; line-height: 1.7; }
+
+  /* 가운데 그래프 */
+  .chart-area {
+    flex: 1; padding: 16px;
+    display: flex; flex-direction: column; gap: 10px; overflow: hidden;
+  }
+
+  .status-bar {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px; color: #888;
+    padding: 13px 16px; background: #fff;
+    border-radius: 6px; border: 1px solid #dde1e8; flex-shrink: 0;
+  }
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; background: #ccc; flex-shrink: 0; }
+  .status-dot.running { background: #22c55e; animation: pulse 1s infinite; }
+  .status-dot.done { background: #4a7eff; }
+
+  .chart-card {
+    background: #fff; border-radius: 8px; border: 1px solid #dde1e8;
+    padding: 14px 18px; flex: 1; display: flex; flex-direction: column; min-height: 0;
+  }
+  .chart-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 10px; padding-bottom: 8px; border-bottom: 2px solid #4a7eff; flex-shrink: 0;
+  }
+  .chart-title { font-size: 13px; font-weight: 700; color: #1a1a1a; }
+  .chart-wrap { flex: 1; position: relative; min-height: 0; }
+
+  /* 오른쪽 패널 */
+  .info-panel {
+    width: 230px; background: #fff;
+    border-left: 1px solid #dde1e8; padding: 16px 14px;
+    overflow-y: auto; flex-shrink: 0;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+
+  .panel-title {
+    font-size: 13px; font-weight: 700; color: #1a1a1a;
+    padding-bottom: 8px; border-bottom: 2px solid #4a7eff;
+  }
+
+  .conc-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 6px 10px; border-radius: 6px; background: #f8f9fc;
+    border-left: 3px solid #ccc; margin-bottom: 5px;
+  }
+  .conc-name { font-size: 12px; color: #444; }
+  .conc-num { font-size: 12px; font-weight: 700; }
+
+  .rate-box {
+    background: #f8f9fc; border: 1px solid #dde1e8; border-radius: 6px; padding: 10px 12px;
+  }
+  .rate-row { display: flex; justify-content: space-between; font-size: 11.5px; margin-bottom: 4px; }
+  .rate-row span:first-child { color: #666; }
+  .rate-row span:last-child { font-weight: 600; }
+
+  .k-calc-box {
+    background: #fffbeb; border: 1px solid #fcd34d;
+    border-left: 4px solid #f59e0b; border-radius: 6px;
+    padding: 12px; font-size: 11.5px; color: #78350f; line-height: 2;
+  }
+  .k-calc-box .k-title { font-size: 12px; font-weight: 700; color: #92400e; margin-bottom: 6px; }
+  .k-calc-box .k-formula { font-size: 12px; color: #555; margin-bottom: 4px; }
+  .k-calc-box .k-step { color: #666; font-size: 11px; }
+  .k-calc-box .k-result { font-size: 15px; font-weight: 700; color: #92400e; margin-top: 6px; }
+
+  .eq-notice {
+    display: none;
+    background: #f0fdf4; border: 1px solid #86efac;
+    border-left: 4px solid #22c55e; border-radius: 6px;
+    padding: 10px 12px; font-size: 11.5px; color: #166534; line-height: 1.7;
+  }
+  .eq-notice.show { display: block; }
+  .eq-notice strong { display: block; font-size: 12px; margin-bottom: 2px; }
+
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+</style>
+</head>
+<body>
+
+<div class="layout">
+
+  <div class="sidebar">
+    <div class="reaction-box">
+      N₂ + 3H₂ ⇌ 2NH₃<br>
+      <span style="font-size:10px;font-weight:400;color:#6680cc;">암모니아 합성 반응</span>
+    </div>
+
+    <div>
+      <div class="section-label">초기 농도 (mol/L)</div>
+      <div class="slider-group">
+        <div class="slider-row">
+          <span class="slider-name">[N₂]₀</span>
+          <span class="slider-val" id="val-n2">1.00</span>
+        </div>
+        <input type="range" id="sl-n2" min="0" max="3" step="0.1" value="1.0"
+          oninput="document.getElementById('val-n2').textContent=parseFloat(this.value).toFixed(2)">
+      </div>
+      <div class="slider-group">
+        <div class="slider-row">
+          <span class="slider-name">[H₂]₀</span>
+          <span class="slider-val" id="val-h2">1.50</span>
+        </div>
+        <input type="range" id="sl-h2" min="0" max="3" step="0.1" value="1.5"
+          oninput="document.getElementById('val-h2').textContent=parseFloat(this.value).toFixed(2)">
+      </div>
+      <div class="slider-group">
+        <div class="slider-row">
+          <span class="slider-name">[NH₃]₀</span>
+          <span class="slider-val" id="val-nh3">0.00</span>
+        </div>
+        <input type="range" id="sl-nh3" min="0" max="3" step="0.1" value="0.0"
+          oninput="document.getElementById('val-nh3').textContent=parseFloat(this.value).toFixed(2)">
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="btn-group">
+      <button class="btn btn-start" id="btn-start" onclick="startSim()">▶ 시작</button>
+      <button class="btn btn-pause" id="btn-pause" onclick="pauseSim()" disabled>⏸</button>
+      <button class="btn btn-reset" onclick="resetSim()">↺</button>
+    </div>
+
+  </div>
+
+  <div class="chart-area">
+    <div class="status-bar">
+      <div class="status-dot" id="status-dot"></div>
+      <span id="status-text">초기 농도를 설정한 후 시작 버튼을 눌러주세요</span>
+    </div>
+    <div class="chart-card">
+      <div class="chart-header">
+        <span class="chart-title">시간에 따른 농도 변화</span>
+        <span style="font-size:11px;color:#4a7eff;background:#f0f4ff;padding:3px 10px;border-radius:20px;">N₂ + 3H₂ ⇌ 2NH₃</span>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="chart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="info-panel">
+    <div class="panel-title">분석 결과</div>
+
+    <div>
+      <div class="section-label" style="margin-bottom:6px;">현재 농도 (mol/L)</div>
+      <div class="conc-item" style="border-left-color:#4a7eff">
+        <span class="conc-name">[N₂]</span>
+        <span class="conc-num" id="conc-n2" style="color:#4a7eff">—</span>
+      </div>
+      <div class="conc-item" style="border-left-color:#ef4444">
+        <span class="conc-name">[H₂]</span>
+        <span class="conc-num" id="conc-h2" style="color:#ef4444">—</span>
+      </div>
+      <div class="conc-item" style="border-left-color:#22c55e">
+        <span class="conc-name">[NH₃]</span>
+        <span class="conc-num" id="conc-nh3" style="color:#22c55e">—</span>
+      </div>
+    </div>
+
+    <div class="rate-box">
+      <div class="rate-row">
+        <span>정반응 속도</span>
+        <span id="rate-fwd" style="color:#4a7eff">—</span>
+      </div>
+      <div class="rate-row">
+        <span>역반응 속도</span>
+        <span id="rate-rev" style="color:#ef4444">—</span>
+      </div>
+      <div class="rate-row" style="margin-top:4px;padding-top:4px;border-top:1px solid #eaedf2;">
+        <span>평형 도달 시간</span>
+        <span id="res-T" style="color:#f59e0b;font-weight:700;">—</span>
+      </div>
+    </div>
+
+    <div class="k-calc-box">
+      <div class="k-title">평형 상수 K 실시간 계산</div>
+      <div class="k-formula">K = [NH₃]² / ([N₂] × [H₂]³)</div>
+      <div class="k-step" id="k-step">= — / (— × —)</div>
+      <div class="k-step" id="k-step2">= — / —</div>
+      <div class="k-result">K = <span id="k-result">—</span></div>
+    </div>
+
+    <div class="eq-notice" id="eq-notice">
+      <strong>✓ 화학 평형 도달!</strong>
+      정반응 속도 = 역반응 속도<br>
+      동적 평형 상태 — 농도 변화 없음
+    </div>
+  </div>
+</div>
+
+<script>
+// N₂ + 3H₂ ⇌ 2NH₃
+// 속도 상수 고정
+const KF = 0.05; // 정반응
+const KR = 0.02; // 역반응
+const DT = 0.05;
+const MAX_TIME = 300;
+const EQ_THRESH = 0.0003;
+
+let n2, h2, nh3;
+let simTime = 0, eqTime = null;
+let isRunning = false, animId = null;
+let chart = null, frameCount = 0;
+
+function calcRates(){
+  const fwd = KF * Math.max(n2,0) * Math.pow(Math.max(h2,0), 3);
+  const rev = KR * Math.pow(Math.max(nh3,0), 2);
+  return {fwd, rev};
+}
+
+function step(){
+  const {fwd, rev} = calcRates();
+  const net = fwd - rev;
+  n2  = Math.max(n2  - 1 * net * DT, 0);
+  h2  = Math.max(h2  - 3 * net * DT, 0);
+  nh3 = Math.max(nh3 + 2 * net * DT, 0);
+  return {fwd, rev};
+}
+
+function updateUI(fwd, rev){
+  document.getElementById('conc-n2').textContent  = n2.toFixed(4);
+  document.getElementById('conc-h2').textContent  = h2.toFixed(4);
+  document.getElementById('conc-nh3').textContent = nh3.toFixed(4);
+  document.getElementById('rate-fwd').textContent = fwd.toFixed(5);
+  document.getElementById('rate-rev').textContent = rev.toFixed(5);
+
+  const nh3sq = Math.pow(Math.max(nh3,0), 2);
+  const n2v   = Math.max(n2, 0);
+  const h2cu  = Math.pow(Math.max(h2,0), 3);
+  const denom = n2v * h2cu;
+  const K     = denom < 1e-9 ? 0 : nh3sq / denom;
+
+  document.getElementById('k-step').textContent  = `= ${nh3sq.toFixed(4)} / (${n2v.toFixed(4)} × ${h2cu.toFixed(4)})`;
+  document.getElementById('k-step2').textContent = `= ${nh3sq.toFixed(4)} / ${denom.toFixed(4)}`;
+  document.getElementById('k-result').textContent = K > 9999 ? K.toExponential(2) : K.toFixed(4);
+}
+
+function initChart(){
+  if(chart) chart.destroy();
+  chart = new Chart(document.getElementById('chart').getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [
+        { label:'[N₂]',  data:[], borderColor:'#4a7eff', borderWidth:2.5, pointRadius:0, tension:0.3, fill:false },
+        { label:'[H₂]',  data:[], borderColor:'#ef4444', borderWidth:2.5, pointRadius:0, tension:0.3, fill:false },
+        { label:'[NH₃]', data:[], borderColor:'#22c55e', borderWidth:2.5, pointRadius:0, tension:0.3, fill:false },
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false, animation:false,
+      plugins:{ legend:{ labels:{ color:'#555', font:{ family:'Noto Sans KR', size:11 }, padding:14 } } },
+      scales:{
+        x:{ title:{display:true,text:'시간 (s)',color:'#888',font:{size:11}}, ticks:{color:'#888',font:{size:10},maxTicksLimit:8}, grid:{color:'#eaedf2'} },
+        y:{ title:{display:true,text:'농도 (mol/L)',color:'#888',font:{size:11}}, ticks:{color:'#888',font:{size:10}}, grid:{color:'#eaedf2'}, min:0 }
+      }
+    }
+  });
+}
+
+function simLoop(){
+  if(!isRunning) return;
+  for(let i=0; i<4; i++){
+    const {fwd, rev} = step();
+    simTime += DT;
+    frameCount++;
+    if(frameCount % 5 === 0){
+      chart.data.labels.push(simTime.toFixed(1));
+      chart.data.datasets[0].data.push(+n2.toFixed(4));
+      chart.data.datasets[1].data.push(+h2.toFixed(4));
+      chart.data.datasets[2].data.push(+nh3.toFixed(4));
+    }
+    if(!eqTime && simTime > 5 && Math.abs(fwd-rev) < EQ_THRESH){
+      eqTime = simTime;
+      document.getElementById('status-dot').className = 'status-dot done';
+      document.getElementById('status-text').textContent = `화학 평형 도달! (t = ${simTime.toFixed(1)}s)`;
+      document.getElementById('res-T').textContent = simTime.toFixed(1) + 's';
+      document.getElementById('eq-notice').classList.add('show');
+    }
+    updateUI(fwd, rev);
+    if(simTime >= MAX_TIME){
+      pauseSim();
+      if(!eqTime){
+        document.getElementById('status-dot').className = 'status-dot done';
+        document.getElementById('status-text').textContent = '시뮬레이션 완료';
+      }
+      chart.update('none');
+      return;
+    }
+  }
+  chart.update('none');
+  animId = requestAnimationFrame(simLoop);
+}
+
+function startSim(){
+  if(isRunning) return;
+  if(simTime === 0){
+    n2  = parseFloat(document.getElementById('sl-n2').value);
+    h2  = parseFloat(document.getElementById('sl-h2').value);
+    nh3 = parseFloat(document.getElementById('sl-nh3').value);
+    eqTime = null; frameCount = 0;
+    document.getElementById('eq-notice').classList.remove('show');
+    document.getElementById('res-T').textContent = '—';
+    initChart();
+  }
+  isRunning = true;
+  document.getElementById('btn-start').disabled = true;
+  document.getElementById('btn-pause').disabled = false;
+  document.getElementById('status-dot').className = 'status-dot running';
+  document.getElementById('status-text').textContent = '시뮬레이션 진행 중...';
+  animId = requestAnimationFrame(simLoop);
+}
+
+function pauseSim(){
+  isRunning = false;
+  if(animId) cancelAnimationFrame(animId);
+  document.getElementById('btn-start').disabled = false;
+  document.getElementById('btn-pause').disabled = true;
+  if(!eqTime){
+    document.getElementById('status-dot').className = 'status-dot';
+    document.getElementById('status-text').textContent = '일시정지 — ▶ 버튼으로 재시작';
+  }
+}
+
+function resetSim(){
+  pauseSim();
+  simTime = 0; eqTime = null; frameCount = 0;
+  document.getElementById('status-dot').className = 'status-dot';
+  document.getElementById('status-text').textContent = '초기 농도를 설정한 후 시작 버튼을 눌러주세요';
+  ['conc-n2','conc-h2','conc-nh3','rate-fwd','rate-rev','res-T'].forEach(id=>{
+    document.getElementById(id).textContent = '—';
+  });
+  document.getElementById('k-step').textContent  = '= — / (— × —)';
+  document.getElementById('k-step2').textContent = '= — / —';
+  document.getElementById('k-result').textContent = '—';
+  document.getElementById('eq-notice').classList.remove('show');
+  initChart();
+}
+
+initChart();
+</script>
+</body>
+</html>
